@@ -1495,41 +1495,17 @@ async function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  // Android: 1) 자동 blob 다운로드 → 2) 2초 후 커스텀 팝업 → 3) 예 → 캘린더 앱 호출
+  // Android: 확인 팝업 → 예 → .ics URL navigation (Chrome이 캘린더 앱으로 연결)
   if (/Android/i.test(navigator.userAgent)) {
-    // 1) 자동 다운로드 (blob URL은 same-origin이라 Chrome 다운로드 prompt 회피 가능)
-    const blob = new Blob([ics], { type: 'text/calendar' });
-    const fileName = `${h.name}_${v.date}.ics`;
-    const blobUrl = URL.createObjectURL(blob);
-    const dlAnchor = document.createElement('a');
-    dlAnchor.href = blobUrl;
-    dlAnchor.download = fileName;
-    document.body.appendChild(dlAnchor);
-    dlAnchor.click();
-    document.body.removeChild(dlAnchor);
-
-    // 2) 2초 후 확인 팝업
     const detailText = `${h.name} · ${d.name} 교수\n${formatDateFull(v.date)}${v.time ? '\n' + formatTime12(v.time) : ''}`;
-    setTimeout(() => {
-      showCalConfirmModal(detailText, async () => {
-        // 3) 예 클릭 시 Web Share API → 기본 캘린더 앱 선택
-        try {
-          const file = new File([blob], fileName, { type: 'text/calendar' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: `🏥 ${h.name} - ${d.name} 교수` });
-            return;
-          }
-        } catch (e) {
-          if (e && e.name === 'AbortError') return;
-        }
-        // 폴백: Apps Script ICS endpoint
-        if (syncUrl) {
-          window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
-        }
-      });
-    }, 2000);
-
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    showCalConfirmModal(detailText, () => {
+      // 예 click → .ics URL로 navigation → Chrome이 받아서 캘린더 앱으로 열기 prompt
+      if (syncUrl) {
+        window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
+      } else {
+        alert('동기화 URL이 필요해요. ⚙️에서 설정해주세요.');
+      }
+    });
     return;
   }
 
