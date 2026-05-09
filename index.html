@@ -827,23 +827,26 @@ function formatRelative(dateStr) {
   return "";
 }
 
-function getNextVisit(doctor) {
+function getUpcomingVisits(doctor) {
   const today = todayStr();
-  const future = doctor.visits
-    .filter(v => v.type === "scheduled" && v.date && v.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  if (future.length > 0) return future[0];
-  // Fallback: any scheduled without date or in past
-  const undated = doctor.visits.filter(v => v.type === "scheduled" && !v.date);
-  if (undated.length > 0) return undated[0];
-  return null;
+  return doctor.visits
+    .filter(v => v.type === "scheduled" && (!v.date || v.date >= today))
+    .sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date.localeCompare(b.date);
+    });
+}
+
+function getNextVisit(doctor) {
+  return getUpcomingVisits(doctor)[0] || null;
 }
 
 function getPastVisits(doctor) {
   const today = todayStr();
-  const next = getNextVisit(doctor);
   return doctor.visits
-    .filter(v => v !== next)
+    .filter(v => v.type === "completed" || (v.type === "scheduled" && v.date && v.date < today))
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
@@ -964,7 +967,7 @@ function renderCard(h) {
 }
 
 function renderDoctor(hid, d) {
-  const next = getNextVisit(d);
+  const upcoming = getUpcomingVisits(d);
   const past = getPastVisits(d);
 
   const wdHTML = d.weekday ? `<span class="doc-weekday">${escapeHtml(d.weekday)}</span>` : "";
@@ -974,40 +977,40 @@ function renderDoctor(hid, d) {
     </div>
   `;
 
-  let nextHTML = "";
-  if (next) {
-    const dday = getDDay(next.date);
+  const nextHTML = upcoming.map((v, idx) => {
+    const dday = getDDay(v.date);
     const urgent = isUrgent(dday);
     const pills = [];
-    if (next.date) {
-      pills.push(`<span class="pill pill-date${urgent ? ' urgent' : ''}">📅 ${escapeHtml(formatDateFull(next.date))}</span>`);
+    if (v.date) {
+      pills.push(`<span class="pill pill-date${urgent ? ' urgent' : ''}">📅 ${escapeHtml(formatDateFull(v.date))}</span>`);
     } else {
       pills.push(`<span class="pill pill-date" style="opacity:0.6;">📅 날짜 미정</span>`);
     }
-    if (next.time) {
-      pills.push(`<span class="pill pill-time">🕐 ${escapeHtml(formatTime12(next.time))}</span>`);
+    if (v.time) {
+      pills.push(`<span class="pill pill-time">🕐 ${escapeHtml(formatTime12(v.time))}</span>`);
     }
-    if (next.date) {
-      const rel = formatRelative(next.date);
+    if (v.date) {
+      const rel = formatRelative(v.date);
       if (rel) pills.push(`<span class="pill pill-relative">${escapeHtml(rel)}</span>`);
     }
-    if (next.date) {
-      pills.push(`<button class="pill pill-cal" onclick="event.stopPropagation();downloadICS('${hid}','${d.id}','${next.id}')">📲 캘린더 추가</button>`);
+    if (v.date) {
+      pills.push(`<button class="pill pill-cal" onclick="event.stopPropagation();downloadICS('${hid}','${d.id}','${v.id}')">📲 캘린더 추가</button>`);
     }
     const pillsHTML = `<div class="visit-pills">${pills.join("")}</div>`;
     const ddayBadge = dday
       ? `<span class="visit-dday ${urgent ? '' : 'far'}">${dday.text}</span>`
       : "";
-    nextHTML = `
-      <div class="visit-next ${urgent ? 'urgent' : ''}" onclick="openVisitModal('${hid}','${d.id}','${next.id}')">
+    const label = idx === 0 ? "📅 다음 진료" : "📅 추가 예약";
+    return `
+      <div class="visit-next ${urgent ? 'urgent' : ''}" onclick="openVisitModal('${hid}','${d.id}','${v.id}')">
         <div class="visit-next-top">
-          <span class="visit-label ${urgent ? 'urgent' : ''}">📅 다음 진료</span>
+          <span class="visit-label ${urgent ? 'urgent' : ''}">${label}</span>
           ${ddayBadge}
         </div>
         ${pillsHTML}
       </div>
     `;
-  }
+  }).join("");
 
   let pastHTML = "";
   if (past.length > 0) {
@@ -1041,7 +1044,7 @@ function renderDoctor(hid, d) {
     `;
   }
 
-  const addVisitHTML = `<button class="add-visit-btn" onclick="openVisitModal('${hid}','${d.id}')">+ ${next ? '추가 예약' : '예약 추가'}</button>`;
+  const addVisitHTML = `<button class="add-visit-btn" onclick="openVisitModal('${hid}','${d.id}')">+ ${upcoming.length > 0 ? '추가 예약' : '예약 추가'}</button>`;
 
   return `
     <div class="doctor-section">
@@ -1220,13 +1223,13 @@ function saveVisit() {
       id: savedId, type: currentVisitType, date, time, notes
     });
   }
+  // 새 예정 진료 또는 날짜 변경 시 자동으로 캘린더 앱 열기 (user gesture 만료 전에 즉시 실행)
+  if (currentVisitType === "scheduled" && (isNew || isDateChanged)) {
+    downloadICS(editingHospitalId, editingDoctorId, savedId);
+  }
+
   saveData(); renderStats(); renderCards();
   closeModal("visit-modal");
-
-  // 새 예정 진료 또는 날짜 변경 시 자동으로 캘린더 앱 열기
-  if (currentVisitType === "scheduled" && (isNew || isDateChanged)) {
-    setTimeout(() => downloadICS(editingHospitalId, editingDoctorId, savedId), 250);
-  }
 }
 
 function deleteCurrentVisit() {
