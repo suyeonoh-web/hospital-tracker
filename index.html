@@ -1470,28 +1470,28 @@ async function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  // Android: Web Share API 우선 (다운로드 다이얼로그 우회, 시스템 공유 시트 → 캘린더 앱 선택)
+  // Android: 확인 팝업 → Web Share API (시스템 공유 시트 → 기본 캘린더 앱 선택)
   if (/Android/i.test(navigator.userAgent)) {
+    const dateLabel = formatDateFull(v.date) + (v.time ? ' ' + formatTime12(v.time) : '');
+    if (!confirm(`📅 캘린더에 추가하시겠습니까?\n\n${h.name} ${d.name} 교수\n${dateLabel}`)) return;
+
+    // Web Share API (Samsung Calendar 등 시스템 캘린더 앱이 share target으로 등록됨)
     try {
       const blob = new Blob([ics], { type: 'text/calendar' });
       const file = new File([blob], `${h.name}_${v.date}.ics`, { type: 'text/calendar' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `🏥 ${h.name} - ${d.name} 교수`,
-          text: `${formatDateFull(v.date)}${v.time ? ' ' + formatTime12(v.time) : ''}`
-        });
+        await navigator.share({ files: [file], title: `🏥 ${h.name} - ${d.name} 교수` });
         return;
       }
     } catch (e) {
-      if (e && e.name === 'AbortError') return; // 사용자가 share 취소
+      if (e && e.name === 'AbortError') return;
     }
-    // Web Share 미지원 → 확인 후 download
-    if (!confirm("📅 캘린더에 추가하시겠습니까?")) return;
+
+    // 폴백 (Web Share 미지원 환경): Apps Script ICS endpoint → 다운로드 → 캘린더 앱 열기
     if (syncUrl) {
       window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
     } else {
-      openGoogleCalendar(h, d, v);
+      alert('동기화 URL이 없어 캘린더 추가가 어렵습니다. ⚙️에서 URL을 설정해주세요.');
     }
     return;
   }
