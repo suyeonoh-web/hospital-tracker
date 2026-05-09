@@ -1473,15 +1473,16 @@ function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  // data: URL 방식 (Safari "다운로드 할 수 없음" 회피, MIME 인식 시 캘린더로 직접 연결)
-  const dataUrl = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+  // iOS: blob URL + download 속성 → Safari가 .ics MIME 인식해서 Calendar 앱 직접 호출
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = dataUrl;
-  a.target = '_blank';
-  a.rel = 'noopener';
+  a.href = url;
+  a.download = `${h.name}_${v.date}.ics`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 // ─── Settings button visibility + long-press to reveal ─
