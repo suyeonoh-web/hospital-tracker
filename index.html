@@ -1322,8 +1322,33 @@ document.querySelectorAll(".chip").forEach(chip => {
 
 document.getElementById("add-hospital-btn").addEventListener("click", openHospitalModal);
 
-// ─── Calendar (.ics) ──────────────────────────────────
+// ─── Calendar (.ics + Google Calendar URL) ────────────
 function pad2(n) { return String(n).padStart(2, '0'); }
+function openGoogleCalendar(h, d, v) {
+  const dateRaw = v.date.replace(/-/g, '');
+  let dates;
+  if (v.time) {
+    const startT = v.time.replace(':', '') + '00';
+    const endT = addOneHour(v.time).replace(':', '') + '00';
+    dates = `${dateRaw}T${startT}/${dateRaw}T${endT}`;
+  } else {
+    const next = new Date(parseDate(v.date));
+    next.setDate(next.getDate() + 1);
+    const endDateRaw = `${next.getFullYear()}${pad2(next.getMonth()+1)}${pad2(next.getDate())}`;
+    dates = `${dateRaw}/${endDateRaw}`;
+  }
+  const text = `🏥 ${h.name} - ${d.name} 교수`;
+  const detailsArr = [v.notes];
+  if (h.phone) detailsArr.push(`전화: ${h.phone}`);
+  if (h.url) detailsArr.push(`예약 페이지: ${h.url}`);
+  if (h.address) detailsArr.push(`주소: ${h.address}`);
+  const details = detailsArr.filter(Boolean).join('\n');
+  const location = h.address ? `${h.address} (${h.name})` : h.name;
+  const params = new URLSearchParams({
+    action: 'TEMPLATE', text, dates, details, location,
+  });
+  window.open(`https://www.google.com/calendar/render?${params.toString()}`, '_blank');
+}
 function icsEscape(s) {
   return String(s ?? '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
 }
@@ -1336,6 +1361,12 @@ function downloadICS(hid, did, vid) {
   const d = h.doctors.find(x => x.id === did);
   const v = d.visits.find(x => x.id === vid);
   if (!v.date) { alert("날짜가 없으면 캘린더에 추가할 수 없어요."); return; }
+
+  // Android: Google Calendar URL로 처리 (.ics를 다운로드만 하고 끝나는 문제 회피)
+  if (/Android/i.test(navigator.userAgent)) {
+    openGoogleCalendar(h, d, v);
+    return;
+  }
 
   const dateRaw = v.date.replace(/-/g, '');
   let startLine, endLine;
