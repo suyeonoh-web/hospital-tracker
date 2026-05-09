@@ -1205,16 +1205,28 @@ function saveVisit() {
   }
   const h = hospitals.find(x => x.id === editingHospitalId);
   const d = h.doctors.find(x => x.id === editingDoctorId);
+  const isNew = !editingVisitId;
+  const isDateChanged = editingVisitId
+    ? (() => { const v = d.visits.find(x => x.id === editingVisitId); return v && v.date !== date; })()
+    : false;
+  let savedId;
   if (editingVisitId) {
     const v = d.visits.find(x => x.id === editingVisitId);
     v.type = currentVisitType; v.date = date; v.time = time; v.notes = notes;
+    savedId = editingVisitId;
   } else {
+    savedId = genId("v");
     d.visits.push({
-      id: genId("v"), type: currentVisitType, date, time, notes
+      id: savedId, type: currentVisitType, date, time, notes
     });
   }
   saveData(); renderStats(); renderCards();
   closeModal("visit-modal");
+
+  // 새 예정 진료 또는 날짜 변경 시 자동으로 캘린더 앱 열기
+  if (currentVisitType === "scheduled" && (isNew || isDateChanged)) {
+    setTimeout(() => downloadICS(editingHospitalId, editingDoctorId, savedId), 250);
+  }
 }
 
 function deleteCurrentVisit() {
