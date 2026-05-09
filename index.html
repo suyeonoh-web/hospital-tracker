@@ -1384,10 +1384,13 @@ function openGoogleCalendar(h, d, v) {
     action: 'TEMPLATE', text: title, dates, details: description, location,
   }).toString();
 
-  // Android Intent URL — 시스템 기본 캘린더 앱 호출 (사용자 선택 가능)
+  // Android Intent URL — content://com.android.calendar/events URI + INSERT action
+  // → 시스템에 등록된 모든 캘린더 앱이 매칭됨 (Samsung, Google, 네이버 등)
   const intentParts = [
-    'intent:#Intent',
+    'intent://com.android.calendar/events#Intent',
+    'scheme=content',
     'action=android.intent.action.INSERT',
+    'category=android.intent.category.DEFAULT',
     'type=vnd.android.cursor.item/event',
     'S.title=' + encodeURIComponent(title),
     'S.eventLocation=' + encodeURIComponent(location),
@@ -1400,11 +1403,8 @@ function openGoogleCalendar(h, d, v) {
   intentParts.push('end');
   const intentUrl = intentParts.join(';');
 
-  const a = document.createElement('a');
-  a.href = intentUrl;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // window.location.href: Chrome Android가 intent URL 가장 확실하게 인식
+  window.location.href = intentUrl;
 }
 function icsEscape(s) {
   return String(s ?? '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
