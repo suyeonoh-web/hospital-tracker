@@ -1393,7 +1393,7 @@ function openGoogleCalendar(h, d, v) {
   const intentParts = [
     'intent:#Intent',
     'action=android.intent.action.INSERT',
-    'type=vnd.android.cursor.item/event',
+    'type=vnd.android.cursor.dir/event',
     'package=' + targetPackage,
     'S.title=' + encodeURIComponent(title),
     'S.eventLocation=' + encodeURIComponent(location),
