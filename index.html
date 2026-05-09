@@ -656,9 +656,9 @@ async function fetchFromBackend(silent) {
   }
 }
 
-async function pushToBackend() {
-  if (!syncUrl) return;
-  setSyncStatus("⟳ 저장 중", "syncing");
+async function pushToBackend(retryCount = 0) {
+  if (!syncUrl) return false;
+  setSyncStatus(retryCount > 0 ? `⟳ 재시도 중 (${retryCount})` : "⟳ 저장 중", "syncing");
   // no-cors 모드로 POST (Safari mobile + Apps Script redirect 우회)
   try {
     await fetch(syncUrl, {
@@ -668,22 +668,37 @@ async function pushToBackend() {
       body: JSON.stringify({ data: hospitals })
     });
   } catch (e) {
+    if (retryCount < 2) {
+      await new Promise(r => setTimeout(r, 1500));
+      return pushToBackend(retryCount + 1);
+    }
     setSyncStatus("⚠ 연결 실패", "error");
-    return;
+    return false;
   }
-  // GET으로 검증
-  await new Promise(r => setTimeout(r, 900));
+  // GET으로 검증 (write가 sheet에 도달했는지 확인)
+  await new Promise(r => setTimeout(r, 1000 + retryCount * 500));
   try {
     const res = await fetch(syncUrl + "?_=" + Date.now());
     const json = await res.json();
     if (json.ok && Array.isArray(json.data) &&
         JSON.stringify(json.data) === JSON.stringify(hospitals)) {
       setSyncStatus("✓ 저장됨", "success");
-    } else {
-      setSyncStatus("⚠ 저장 안됨", "error");
+      return true;
     }
+    if (retryCount < 2) {
+      await new Promise(r => setTimeout(r, 1200));
+      return pushToBackend(retryCount + 1);
+    }
+    setSyncStatus("⚠ 저장 안됨", "error");
+    alert("시트 저장 실패. 잠시 후 🔄 버튼으로 다시 시도해주세요.");
+    return false;
   } catch (e) {
+    if (retryCount < 2) {
+      await new Promise(r => setTimeout(r, 1000));
+      return pushToBackend(retryCount + 1);
+    }
     setSyncStatus("⚠ 검증 실패", "error");
+    return false;
   }
 }
 
@@ -1469,11 +1484,25 @@ function backfillAddresses(data) {
 async function init() {
   if (syncUrl) {
     const result = await fetchFromBackend();
-    if (result && Array.isArray(result.data) && result.data.length > 0) {
-      hospitals = result.data;
-      const changed = backfillAddresses(hospitals);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
-      if (changed) pushToBackend();
+    if (result && Array.isArray(result.data)) {
+      const localUpdated = localStorage.getItem(STORAGE_KEY + "-updated");
+      const localTime = localUpdated ? new Date(localUpdated).getTime() : 0;
+      const remoteTime = result.updatedAt ? new Date(result.updatedAt).getTime() : 0;
+
+      if (result.data.length === 0) {
+        // 시트 비어있음 → 로컬 push
+        await pushToBackend();
+      } else if (localTime > remoteTime + 5000) {
+        // 로컬에 미동기화 변경사항 (시트보다 5초 이상 새로움) → push 우선
+        setSyncStatus("⟳ 로컬 변경 동기화 중", "syncing");
+        await pushToBackend();
+      } else {
+        // 시트가 더 최신 또는 동등 → 시트로 덮어쓰기
+        hospitals = result.data;
+        const changed = backfillAddresses(hospitals);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+        if (changed) pushToBackend();
+      }
     }
   } else {
     backfillAddresses(hospitals);
