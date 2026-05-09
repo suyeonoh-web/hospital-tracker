@@ -158,10 +158,10 @@
   .pill-relative { background: #ececef; color: #424245; font-weight: 500; }
   .pill-small { font-size: 11px; padding: 3px 10px; gap: 3px; }
   .pill-cal {
-    background: #1d1d1f; color: #fff; border: none;
+    background: #e8f8ec; color: #248a3d; border: none;
     cursor: pointer; font-family: inherit;
   }
-  .pill-cal:active { background: #424245; }
+  .pill-cal:active { background: #c5ecd0; }
 
   .past-visits {
     margin-top: 4px;
@@ -226,7 +226,8 @@
   }
 
   .actions {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   }
   .actions.single { grid-template-columns: 1fr; }
   .btn {
@@ -357,6 +358,7 @@
 <header>
   <div class="header-top">
     <h1 id="header-title" style="cursor:pointer;" title="길게 누르면 동기화 설정">병원 예약 트래커</h1>
+    <button class="settings-btn" id="refresh-btn" onclick="manualRefresh()" title="새로고침" style="display:none;">🔄</button>
     <button class="settings-btn" id="settings-btn" onclick="openSettingsModal()" title="동기화 설정">⚙️</button>
   </div>
   <p class="subtitle"><span id="subtitle"></span><span class="sync-status off" id="sync-status"></span></p>
@@ -489,6 +491,10 @@
       <input type="url" class="form-input" id="hosp-url" placeholder="https://...">
     </div>
     <div class="form-group">
+      <label class="form-label">주소 (선택)</label>
+      <input type="text" class="form-input" id="hosp-address" placeholder="예: 서울 강남구 ...">
+    </div>
+    <div class="form-group">
       <label class="form-label">신청자 (선택)</label>
       <input type="text" class="form-input" id="hosp-applicant">
     </div>
@@ -509,27 +515,27 @@ const OLD_STORAGE_KEY = "hospital-tracker-v3";
 
 const DEFAULT_DATA = [
   { id: "h1", name: "분당서울대병원", status: "done", phone: "1588-3369",
-    url: "https://www.snubh.org", applicant: "", memo: "",
+    url: "https://www.snubh.org", address: "경기 성남시 분당구 구미로173번길 82", applicant: "", memo: "",
     doctors: [{ id: "d1", name: "노재홍", weekday: "",
       visits: [{ id: "v1", type: "scheduled", date: "2026-05-11", time: "14:10", notes: "" }] }] },
   { id: "h2", name: "삼성서울병원", status: "done", phone: "1599-3114",
-    url: "https://www.samsunghospital.com", applicant: "", memo: "",
+    url: "https://www.samsunghospital.com", address: "서울 강남구 일원로 81", applicant: "", memo: "",
     doctors: [{ id: "d2", name: "이동윤", weekday: "",
       visits: [{ id: "v2", type: "scheduled", date: "2026-05-12", time: "09:20", notes: "" }] }] },
   { id: "h3", name: "세브란스병원", status: "waiting", phone: "1599-1004",
-    url: "https://sev.severance.healthcare", applicant: "", memo: "빠른예약 신청 완료",
+    url: "https://sev.severance.healthcare", address: "서울 서대문구 연세로 50-1", applicant: "", memo: "빠른예약 신청 완료",
     doctors: [] },
   { id: "h4", name: "서울아산병원", status: "waiting", phone: "1688-7575",
-    url: "https://www.amc.seoul.kr", applicant: "", memo: "빠른예약 신청 완료",
+    url: "https://www.amc.seoul.kr", address: "서울 송파구 올림픽로43길 88", applicant: "", memo: "빠른예약 신청 완료",
     doctors: [
       { id: "d3", name: "김주현", weekday: "월 진료", visits: [] },
       { id: "d4", name: "김성훈", weekday: "화·수 오후", visits: [] }
     ] },
   { id: "h5", name: "고대 안산병원", status: "waiting", phone: "1577-7516",
-    url: "https://ansan.kumc.or.kr", applicant: "", memo: "빠른예약 신청 완료",
+    url: "https://ansan.kumc.or.kr", address: "경기 안산시 단원구 적금로 123", applicant: "", memo: "빠른예약 신청 완료",
     doctors: [{ id: "d5", name: "민경진", weekday: "", visits: [] }] },
   { id: "h6", name: "고대 구로병원", status: "online", phone: "1588-3369",
-    url: "https://guro.kumc.or.kr", applicant: "", memo: "온라인 즉시 예약 가능",
+    url: "https://guro.kumc.or.kr", address: "서울 구로구 구로동로 148", applicant: "", memo: "온라인 즉시 예약 가능",
     doctors: [
       { id: "d6", name: "소경아", weekday: "",
         visits: [{ id: "v6", type: "scheduled", date: "2026-05-14", time: "", notes: "" }] },
@@ -537,7 +543,7 @@ const DEFAULT_DATA = [
         visits: [{ id: "v7", type: "scheduled", date: "2026-05-19", time: "", notes: "" }] }
     ] },
   { id: "h7", name: "고대 안암병원", status: "online", phone: "1577-0083",
-    url: "https://anam.kumc.or.kr", applicant: "", memo: "온라인 즉시 예약 가능",
+    url: "https://anam.kumc.or.kr", address: "서울 성북구 고려대로 73", applicant: "", memo: "온라인 즉시 예약 가능",
     doctors: [
       { id: "d8", name: "김성민", weekday: "",
         visits: [{ id: "v8", type: "scheduled", date: "2026-05-22", time: "", notes: "" }] },
@@ -551,19 +557,19 @@ const DEFAULT_DATA = [
         visits: [{ id: "v12", type: "scheduled", date: "2026-06-24", time: "", notes: "" }] }
     ] },
   { id: "h8", name: "서울대학교병원", status: "call", phone: "1588-5700",
-    url: "https://www.snuh.org", applicant: "", memo: "온라인 예약 불가 - 전화 필요",
+    url: "https://www.snuh.org", address: "서울 종로구 대학로 101", applicant: "", memo: "온라인 예약 불가 - 전화 필요",
     doctors: [] },
   { id: "h9", name: "서울성모병원", status: "call", phone: "1588-1511",
-    url: "https://www.cmcseoul.or.kr", applicant: "", memo: "온라인 예약 불가 - 전화 필요",
+    url: "https://www.cmcseoul.or.kr", address: "서울 서초구 반포대로 222", applicant: "", memo: "온라인 예약 불가 - 전화 필요",
     doctors: [
       { id: "d13", name: "김미란", weekday: "", visits: [] },
       { id: "d14", name: "이근호", weekday: "", visits: [] }
     ] },
   { id: "h10", name: "가천대 길병원", status: "unknown", phone: "",
-    url: "https://www.gilhospital.com", applicant: "", memo: "예약 방법 미조사",
+    url: "https://www.gilhospital.com", address: "인천 남동구 남동대로774번길 21", applicant: "", memo: "예약 방법 미조사",
     doctors: [] },
   { id: "h11", name: "아주대학교병원", status: "unknown", phone: "",
-    url: "https://www.ajoumc.or.kr", applicant: "", memo: "예약 방법 미조사",
+    url: "https://www.ajoumc.or.kr", address: "경기 수원시 영통구 월드컵로 164", applicant: "", memo: "예약 방법 미조사",
     doctors: [] }
 ];
 
@@ -653,21 +659,47 @@ async function fetchFromBackend(silent) {
 async function pushToBackend() {
   if (!syncUrl) return;
   setSyncStatus("⟳ 저장 중", "syncing");
+  // no-cors 모드로 POST (Safari mobile + Apps Script redirect 우회)
   try {
-    const res = await fetch(syncUrl, {
+    await fetch(syncUrl, {
       method: "POST",
+      mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ data: hospitals })
     });
-    const json = await res.json();
-    if (json.ok) {
-      setSyncStatus("✓ 저장됨", "success");
-    } else {
-      setSyncStatus("⚠ " + (json.error || "저장 실패"), "error");
-    }
   } catch (e) {
     setSyncStatus("⚠ 연결 실패", "error");
+    return;
   }
+  // GET으로 검증
+  await new Promise(r => setTimeout(r, 900));
+  try {
+    const res = await fetch(syncUrl + "?_=" + Date.now());
+    const json = await res.json();
+    if (json.ok && Array.isArray(json.data) &&
+        JSON.stringify(json.data) === JSON.stringify(hospitals)) {
+      setSyncStatus("✓ 저장됨", "success");
+    } else {
+      setSyncStatus("⚠ 저장 안됨", "error");
+    }
+  } catch (e) {
+    setSyncStatus("⚠ 검증 실패", "error");
+  }
+}
+
+async function manualRefresh() {
+  if (!syncUrl) return;
+  const btn = document.getElementById("refresh-btn");
+  if (btn) btn.style.transition = "transform 0.5s"; if (btn) btn.style.transform = "rotate(360deg)";
+  const result = await fetchFromBackend();
+  if (result && Array.isArray(result.data) && result.data.length > 0) {
+    if (JSON.stringify(result.data) !== JSON.stringify(hospitals)) {
+      hospitals = result.data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+      renderStats(); renderCards();
+    }
+  }
+  setTimeout(() => { if (btn) { btn.style.transform = ""; btn.style.transition = ""; } }, 600);
 }
 
 function openSettingsModal() {
@@ -828,9 +860,8 @@ function formatRelative(dateStr) {
 }
 
 function getUpcomingVisits(doctor) {
-  const today = todayStr();
   return doctor.visits
-    .filter(v => v.type === "scheduled" && (!v.date || v.date >= today))
+    .filter(v => v.type === "scheduled")
     .sort((a, b) => {
       if (!a.date && !b.date) return 0;
       if (!a.date) return 1;
@@ -844,9 +875,8 @@ function getNextVisit(doctor) {
 }
 
 function getPastVisits(doctor) {
-  const today = todayStr();
   return doctor.visits
-    .filter(v => v.type === "completed" || (v.type === "scheduled" && v.date && v.date < today))
+    .filter(v => v.type === "completed")
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
@@ -945,6 +975,9 @@ function renderCard(h) {
   }
   if (h.phone) {
     buttons.push(`<a href="tel:${h.phone.replace(/-/g,'')}" class="btn ${h.status === 'call' ? 'btn-warning' : 'btn-secondary'}">📞 ${escapeHtml(h.phone)}</a>`);
+  }
+  if (h.address) {
+    buttons.push(`<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.address)}" target="_blank" rel="noopener" class="btn btn-secondary">📍 지도</a>`);
   }
   const actionsHTML = buttons.length
     ? `<div class="actions ${buttons.length === 1 ? 'single' : ''}">${buttons.join('')}</div>`
@@ -1247,6 +1280,7 @@ function openHospitalModal() {
   document.getElementById("hosp-status").value = "unknown";
   document.getElementById("hosp-phone").value = "";
   document.getElementById("hosp-url").value = "";
+  document.getElementById("hosp-address").value = "";
   document.getElementById("hosp-applicant").value = "";
   document.getElementById("hosp-memo").value = "";
   showModal("hospital-modal");
@@ -1260,6 +1294,7 @@ function saveHospital() {
     status: document.getElementById("hosp-status").value,
     phone: document.getElementById("hosp-phone").value.trim(),
     url: document.getElementById("hosp-url").value.trim(),
+    address: document.getElementById("hosp-address").value.trim(),
     applicant: document.getElementById("hosp-applicant").value.trim(),
     memo: document.getElementById("hosp-memo").value.trim(),
     doctors: []
@@ -1324,7 +1359,9 @@ function downloadICS(hid, did, vid) {
   const descParts = [v.notes];
   if (h.phone) descParts.push(`전화: ${h.phone}`);
   if (h.url) descParts.push(`예약 페이지: ${h.url}`);
+  if (h.address) descParts.push(`주소: ${h.address}`);
   const description = descParts.filter(Boolean).join('\n');
+  const location = h.address ? `${h.address} (${h.name})` : h.name;
 
   const ics = [
     'BEGIN:VCALENDAR',
@@ -1338,7 +1375,7 @@ function downloadICS(hid, did, vid) {
     endLine,
     `SUMMARY:${icsEscape(summary)}`,
     `DESCRIPTION:${icsEscape(description)}`,
-    `LOCATION:${icsEscape(h.name)}`,
+    `LOCATION:${icsEscape(location)}`,
     'BEGIN:VALARM',
     'TRIGGER:-PT2H',
     'ACTION:DISPLAY',
@@ -1348,21 +1385,23 @@ function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
+  // data: URL 방식 (Safari "다운로드 할 수 없음" 회피, MIME 인식 시 캘린더로 직접 연결)
+  const dataUrl = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `${h.name}_${v.date}.ics`;
+  a.href = dataUrl;
+  a.target = '_blank';
+  a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ─── Settings button visibility + long-press to reveal ─
 function updateSettingsBtnVisibility() {
-  const btn = document.getElementById("settings-btn");
-  if (btn) btn.style.display = syncUrl ? "none" : "";
+  const settingsBtn = document.getElementById("settings-btn");
+  const refreshBtn = document.getElementById("refresh-btn");
+  if (settingsBtn) settingsBtn.style.display = syncUrl ? "none" : "";
+  if (refreshBtn) refreshBtn.style.display = syncUrl ? "" : "none";
 }
 (function setupLongPress() {
   const title = document.getElementById("header-title");
@@ -1385,13 +1424,28 @@ function updateSettingsBtnVisibility() {
 })();
 
 // Init
+function backfillAddresses(data) {
+  let changed = false;
+  data.forEach(h => {
+    if (!h.address) {
+      const def = DEFAULT_DATA.find(x => x.name === h.name);
+      if (def && def.address) { h.address = def.address; changed = true; }
+    }
+  });
+  return changed;
+}
+
 async function init() {
   if (syncUrl) {
     const result = await fetchFromBackend();
     if (result && Array.isArray(result.data) && result.data.length > 0) {
       hospitals = result.data;
+      const changed = backfillAddresses(hospitals);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+      if (changed) pushToBackend();
     }
+  } else {
+    backfillAddresses(hospitals);
   }
   updateSettingsBtnVisibility();
   renderStats();
