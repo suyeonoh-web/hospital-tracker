@@ -1384,14 +1384,17 @@ function openGoogleCalendar(h, d, v) {
     action: 'TEMPLATE', text: title, dates, details: description, location,
   }).toString();
 
-  // Android Intent URL — content://com.android.calendar/events URI + INSERT action
-  // → 시스템에 등록된 모든 캘린더 앱이 매칭됨 (Samsung, Google, 네이버 등)
+  // 디바이스 제조사 감지 → 해당 캘린더 앱 직접 타겟
+  // 갤럭시: com.samsung.android.calendar / 그 외: com.google.android.calendar
+  const ua = navigator.userAgent;
+  const isSamsung = /SAMSUNG|SM-|SCV|Galaxy/i.test(ua);
+  const targetPackage = isSamsung ? 'com.samsung.android.calendar' : 'com.google.android.calendar';
+
   const intentParts = [
-    'intent://com.android.calendar/events#Intent',
-    'scheme=content',
+    'intent:#Intent',
     'action=android.intent.action.INSERT',
-    'category=android.intent.category.DEFAULT',
     'type=vnd.android.cursor.item/event',
+    'package=' + targetPackage,
     'S.title=' + encodeURIComponent(title),
     'S.eventLocation=' + encodeURIComponent(location),
     'S.description=' + encodeURIComponent(description),
@@ -1403,7 +1406,7 @@ function openGoogleCalendar(h, d, v) {
   intentParts.push('end');
   const intentUrl = intentParts.join(';');
 
-  // window.location.href: Chrome Android가 intent URL 가장 확실하게 인식
+  // location.href로 navigation → Chrome/Samsung Internet이 intent: 가로채서 앱 호출
   window.location.href = intentUrl;
 }
 function icsEscape(s) {
