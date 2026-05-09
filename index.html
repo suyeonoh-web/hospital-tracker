@@ -1416,7 +1416,7 @@ function addOneHour(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
   return pad2((h + 1) % 24) + ':' + pad2(m);
 }
-function downloadICS(hid, did, vid) {
+async function downloadICS(hid, did, vid) {
   const h = hospitals.find(x => x.id === hid);
   const d = h.doctors.find(x => x.id === did);
   const v = d.visits.find(x => x.id === vid);
@@ -1470,8 +1470,24 @@ function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  // Android: Apps Script ICS 엔드포인트로 navigation → text/calendar MIME으로 응답 → 캘린더 앱 선택지 등장
+  // Android: Web Share API 우선 (다운로드 다이얼로그 우회, 시스템 공유 시트 → 캘린더 앱 선택)
   if (/Android/i.test(navigator.userAgent)) {
+    try {
+      const blob = new Blob([ics], { type: 'text/calendar' });
+      const file = new File([blob], `${h.name}_${v.date}.ics`, { type: 'text/calendar' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `🏥 ${h.name} - ${d.name} 교수`,
+          text: `${formatDateFull(v.date)}${v.time ? ' ' + formatTime12(v.time) : ''}`
+        });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return; // 사용자가 share 취소
+    }
+    // Web Share 미지원 → 확인 후 download
+    if (!confirm("📅 캘린더에 추가하시겠습니까?")) return;
     if (syncUrl) {
       window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
     } else {
