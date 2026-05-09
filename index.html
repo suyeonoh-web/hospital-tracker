@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="병원예약">
+<meta name="theme-color" content="#1d1d1f">
+<title>병원 예약 트래커</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23007aff'/><text x='90' y='118' font-size='100' text-anchor='middle' fill='white'>🏥</text></svg>">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+    background: #f5f5f7; color: #1d1d1f; line-height: 1.4;
+    padding-bottom: 100px;
+  }
+
+  header {
+    background: #fff; padding: 20px 16px 12px;
+    border-bottom: 1px solid #e5e5ea;
+    position: sticky; top: 0; z-index: 10;
+  }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #86868b; margin-bottom: 14px; }
+
+  .stats {
+    display: flex; gap: 6px; margin-bottom: 12px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .stats::-webkit-scrollbar { display: none; }
+  .stat {
+    flex-shrink: 0; background: #f5f5f7; border-radius: 10px;
+    padding: 8px 12px; text-align: center; min-width: 64px;
+  }
+  .stat-num { font-size: 18px; font-weight: 700; line-height: 1; margin-bottom: 2px; }
+  .stat-label { color: #86868b; font-size: 11px; }
+
+  .filters {
+    display: flex; gap: 6px; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0; border: 1px solid #d2d2d7; background: #fff;
+    border-radius: 16px; padding: 6px 12px; font-size: 13px;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    font-family: inherit;
+  }
+  .chip.active { background: #1d1d1f; color: #fff; border-color: #1d1d1f; }
+
+  main { padding: 12px 16px; }
+
+  .group-title {
+    font-size: 12px; color: #86868b; font-weight: 600;
+    margin: 18px 4px 8px; letter-spacing: 0.3px;
+  }
+  .group-title:first-child { margin-top: 4px; }
+
+  .card {
+    background: #fff; border-radius: 14px; padding: 14px 16px;
+    margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    border-left: 4px solid transparent;
+  }
+  .card.done { border-left-color: #34c759; }
+  .card.waiting { border-left-color: #ffcc00; }
+  .card.online { border-left-color: #007aff; }
+  .card.call { border-left-color: #ff9500; }
+  .card.unknown { border-left-color: #c7c7cc; }
+
+  .card-top {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; margin-bottom: 8px;
+  }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; padding: 4px 10px;
+    border-radius: 6px; white-space: nowrap; cursor: pointer;
+    border: none; font-family: inherit;
+  }
+  .badge::after { content: "▾"; font-size: 9px; opacity: 0.6; }
+  .badge.done { background: #e8f8ec; color: #248a3d; }
+  .badge.waiting { background: #fff8d6; color: #8a6d00; }
+  .badge.online { background: #e3f0ff; color: #0040b8; }
+  .badge.call { background: #ffeed6; color: #a85800; }
+  .badge.unknown { background: #ececef; color: #6e6e73; }
+
+  .hospital { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .hospital-meta { font-size: 12px; color: #86868b; margin-bottom: 12px; }
+
+  /* Doctor sections */
+  .doctor-section {
+    background: #fafafa; border-radius: 12px; padding: 12px;
+    margin-bottom: 8px;
+  }
+  .doc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px; gap: 8px;
+  }
+  .doc-name {
+    font-size: 14px; font-weight: 700; color: #1d1d1f;
+  }
+  .doc-name::before { content: "👨‍⚕️ "; }
+  .doc-weekday {
+    font-size: 11px; color: #6e6e73; background: #fff;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .doc-actions {
+    display: flex; gap: 4px;
+  }
+  .icon-btn {
+    background: none; border: none; cursor: pointer;
+    padding: 4px 6px; font-size: 12px; color: #86868b;
+    border-radius: 4px;
+  }
+  .icon-btn:active { background: #ececef; }
+
+  /* Visit cards */
+  .visit-next {
+    background: #fff; border: 1px solid #d2d2d7; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 6px; cursor: pointer;
+  }
+  .visit-next.urgent { border-color: #ff3b30; background: #fff5f5; }
+  .visit-next-top {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; margin-bottom: 4px;
+  }
+  .visit-label {
+    font-size: 10px; font-weight: 700; color: #007aff;
+    letter-spacing: 0.5px;
+  }
+  .visit-label.urgent { color: #ff3b30; }
+  .visit-dday {
+    font-size: 11px; font-weight: 700;
+    background: #fff0f0; color: #ff3b30;
+    padding: 2px 8px; border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .visit-dday.far { background: #f0f0f2; color: #6e6e73; }
+  .visit-pills {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; margin-top: 6px;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 999px; padding: 5px 12px;
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; line-height: 1.3;
+  }
+  .pill-date { background: #e3f0ff; color: #0040b8; }
+  .pill-date.urgent { background: #ffe5e5; color: #cc0000; }
+  .pill-time { background: #fff5e6; color: #cc6600; }
+  .pill-relative { background: #ececef; color: #424245; font-weight: 500; }
+  .pill-small { font-size: 11px; padding: 3px 10px; gap: 3px; }
+
+  .past-visits {
+    margin-top: 4px;
+  }
+  .past-visits summary {
+    list-style: none; cursor: pointer;
+    font-size: 12px; color: #86868b; font-weight: 600;
+    padding: 6px 0;
+  }
+  .past-visits summary::-webkit-details-marker { display: none; }
+  .past-visits summary::before { content: "▸ "; }
+  .past-visits[open] summary::before { content: "▾ "; }
+  .past-visit {
+    background: #fff; border-radius: 8px;
+    padding: 8px 10px; margin: 4px 0;
+    font-size: 12px; cursor: pointer;
+    border: 1px solid #ececef;
+  }
+  .past-visit-top {
+    display: flex; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .past-visit-date {
+    font-weight: 600; color: #1d1d1f;
+  }
+  .past-visit-type {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  }
+  .past-visit-type.completed { background: #e8f8ec; color: #248a3d; }
+  .past-visit-type.scheduled { background: #fff8d6; color: #8a6d00; }
+  .past-visit-notes {
+    color: #424245; font-size: 12px; white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .past-visit-notes.empty { color: #c7c7cc; font-style: italic; }
+
+  .add-visit-btn {
+    width: 100%; background: transparent; border: 1px dashed #d2d2d7;
+    border-radius: 8px; padding: 8px; margin-top: 6px;
+    color: #007aff; font-size: 12px; cursor: pointer;
+    font-family: inherit; font-weight: 600;
+  }
+
+  .add-doc-btn {
+    width: 100%; background: #fafafa; border: 1px dashed #d2d2d7;
+    border-radius: 10px; padding: 10px; margin-bottom: 10px;
+    color: #007aff; font-size: 13px; cursor: pointer;
+    font-family: inherit; font-weight: 600;
+  }
+
+  .memo {
+    font-size: 13px; color: #6e6e73; background: #f5f5f7;
+    padding: 10px; border-radius: 8px; margin-bottom: 10px;
+    cursor: text; min-height: 36px;
+    border: 1px solid transparent;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .memo:hover { border-color: #d2d2d7; }
+  .memo.empty { color: #c7c7cc; font-style: italic; }
+  .memo[contenteditable="true"] {
+    background: #fff; border-color: #007aff; outline: none;
+  }
+
+  .actions {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .actions.single { grid-template-columns: 1fr; }
+  .btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 11px; font-size: 13px; font-weight: 600;
+    border-radius: 10px; text-decoration: none; cursor: pointer;
+    border: none; font-family: inherit; font-variant-numeric: tabular-nums;
+  }
+  .btn-primary { background: #007aff; color: #fff; }
+  .btn-primary:active { background: #0051d5; }
+  .btn-secondary { background: #f5f5f7; color: #1d1d1f; }
+  .btn-secondary:active { background: #e5e5ea; }
+  .btn-warning { background: #ff9500; color: #fff; }
+  .btn-warning:active { background: #cc7700; }
+  .btn-danger { background: transparent; color: #ff3b30; }
+
+  .empty {
+    text-align: center; color: #86868b;
+    padding: 40px 20px; font-size: 14px;
+  }
+
+  .fab {
+    position: fixed; bottom: 24px; right: 16px;
+    width: 56px; height: 56px; border-radius: 28px;
+    background: #1d1d1f; color: #fff;
+    border: none; font-size: 24px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 5;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 100; display: none; align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 480px;
+    border-radius: 16px 16px 0 0; padding: 20px 16px 32px;
+    max-height: 85vh; overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 16px; font-weight: 700; margin-bottom: 16px;
+    text-align: center;
+  }
+  .form-group { margin-bottom: 12px; }
+  .form-label {
+    display: block; font-size: 12px; color: #6e6e73;
+    margin-bottom: 4px; font-weight: 600;
+  }
+  .form-input, .form-select, .form-textarea {
+    width: 100%; padding: 10px 12px; font-size: 14px;
+    border: 1px solid #d2d2d7; border-radius: 8px;
+    font-family: inherit; background: #fff;
+  }
+  .form-textarea { min-height: 80px; resize: vertical; }
+  .form-input:focus, .form-select:focus, .form-textarea:focus {
+    outline: none; border-color: #007aff;
+  }
+  .modal-buttons {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-top: 16px;
+  }
+  .modal-buttons.three { grid-template-columns: auto 1fr 1fr; }
+
+  .type-toggle {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    margin-bottom: 12px;
+  }
+  .type-btn {
+    padding: 10px; border: 1px solid #d2d2d7; background: #fff;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit; color: #424245;
+  }
+  .type-btn.selected.scheduled { background: #e3f0ff; color: #0040b8; border-color: #007aff; }
+  .type-btn.selected.completed { background: #e8f8ec; color: #248a3d; border-color: #34c759; }
+
+  .status-options {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .status-option {
+    padding: 14px; border-radius: 10px; border: 1px solid #d2d2d7;
+    background: #fff; font-size: 14px; font-weight: 500;
+    cursor: pointer; text-align: left; font-family: inherit;
+  }
+  .status-option.selected {
+    border-color: #007aff; background: #e3f0ff;
+  }
+
+  .quick-dates {
+    display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .quick-date-btn {
+    padding: 4px 10px; font-size: 11px; background: #f5f5f7;
+    border: none; border-radius: 12px; cursor: pointer;
+    color: #424245; font-family: inherit;
+  }
+
+  .last-updated {
+    text-align: center; color: #c7c7cc; font-size: 11px;
+    margin-top: 20px;
+  }
+
+  .header-top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 4px;
+  }
+  .settings-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 20px; padding: 4px 8px; color: #86868b;
+  }
+  .settings-btn:active { color: #1d1d1f; }
+  .sync-status {
+    display: inline-block; font-size: 10px;
+    padding: 2px 8px; border-radius: 999px;
+    background: #ececef; color: #6e6e73; margin-left: 6px;
+    font-weight: 600;
+  }
+  .sync-status.success { background: #e8f8ec; color: #248a3d; }
+  .sync-status.error { background: #ffeed6; color: #cc6600; }
+  .sync-status.syncing { background: #e3f0ff; color: #0040b8; }
+  .sync-status.off { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <h1>병원 예약 트래커</h1>
+    <button class="settings-btn" onclick="openSettingsModal()" title="동기화 설정">⚙️</button>
+  </div>
+  <p class="subtitle"><span id="subtitle"></span><span class="sync-status off" id="sync-status"></span></p>
+  <div class="stats" id="stats"></div>
+  <div class="filters" id="filters">
+    <button class="chip active" data-filter="all">전체</button>
+    <button class="chip" data-filter="done">✅ 확정</button>
+    <button class="chip" data-filter="waiting">🟡 대기</button>
+    <button class="chip" data-filter="online">🌐 온라인</button>
+    <button class="chip" data-filter="call">📞 전화</button>
+    <button class="chip" data-filter="unknown">❓ 미조사</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<div class="last-updated" id="last-updated"></div>
+
+<button class="fab" id="add-hospital-btn" title="병원 추가">+</button>
+
+<!-- Status modal -->
+<div class="modal-overlay" id="status-modal">
+  <div class="modal">
+    <div class="modal-title">상태 변경</div>
+    <div class="status-options" id="status-options"></div>
+    <div class="modal-buttons">
+      <button class="btn btn-secondary" onclick="closeModal('status-modal')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- Doctor modal -->
+<div class="modal-overlay" id="doctor-modal">
+  <div class="modal">
+    <div class="modal-title" id="doctor-modal-title">교수 추가</div>
+    <div class="form-group">
+      <label class="form-label">교수 이름 *</label>
+      <input type="text" class="form-input" id="doc-name" placeholder="예: 김철수">
+    </div>
+    <div class="form-group">
+      <label class="form-label">외래 요일 메모 (선택)</label>
+      <input type="text" class="form-input" id="doc-weekday" placeholder="예: 월·수 오후 / 화 오전">
+    </div>
+    <div class="modal-buttons three">
+      <button class="btn btn-danger" id="doc-delete-btn" onclick="deleteCurrentDoctor()" style="display:none;">삭제</button>
+      <button class="btn btn-secondary" onclick="closeModal('doctor-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveDoctor()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Visit modal -->
+<div class="modal-overlay" id="visit-modal">
+  <div class="modal">
+    <div class="modal-title" id="visit-modal-title">진료 추가</div>
+    <div class="type-toggle">
+      <button class="type-btn scheduled" id="type-scheduled" onclick="setVisitType('scheduled')">📅 예정 진료</button>
+      <button class="type-btn completed" id="type-completed" onclick="setVisitType('completed')">✅ 진료 완료</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">날짜 *</label>
+      <div class="quick-dates" id="quick-dates"></div>
+      <input type="date" class="form-input" id="visit-date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">시간 (선택)</label>
+      <input type="time" class="form-input" id="visit-time">
+    </div>
+    <div class="form-group" id="notes-group">
+      <label class="form-label" id="notes-label">진료 내용 / 메모</label>
+      <textarea class="form-textarea" id="visit-notes" placeholder="예: 초진, 혈액검사 처방, 다음 진료 6/15"></textarea>
+    </div>
+    <div class="modal-buttons three">
+      <button class="btn btn-danger" id="visit-delete-btn" onclick="deleteCurrentVisit()" style="display:none;">삭제</button>
+      <button class="btn btn-secondary" onclick="closeModal('visit-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveVisit()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-title">⚙️ 동기화 설정</div>
+    <div class="form-group">
+      <label class="form-label">Google Apps Script Web App URL</label>
+      <input type="url" class="form-input" id="sync-url-input" placeholder="https://script.google.com/macros/s/.../exec">
+      <p style="font-size:11px;color:#86868b;margin-top:6px;line-height:1.5;">
+        Apps Script 배포 후 받은 웹 앱 URL을 붙여넣으세요.<br>
+        가족이 같은 URL을 사용하면 데이터가 실시간 공유됩니다.<br>
+        빈 칸으로 두면 동기화 끄기.
+      </p>
+    </div>
+    <div class="form-group" id="sync-info" style="display:none;">
+      <label class="form-label">동기화 상태</label>
+      <div id="sync-info-text" style="font-size:12px;color:#424245;"></div>
+    </div>
+    <div class="modal-buttons three">
+      <button class="btn btn-danger" onclick="disableSync()">동기화 끄기</button>
+      <button class="btn btn-secondary" onclick="closeModal('settings-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveSyncSettings()">저장 및 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add hospital modal -->
+<div class="modal-overlay" id="hospital-modal">
+  <div class="modal">
+    <div class="modal-title">병원 추가</div>
+    <div class="form-group">
+      <label class="form-label">병원명 *</label>
+      <input type="text" class="form-input" id="hosp-name" placeholder="예: 한양대학교병원">
+    </div>
+    <div class="form-group">
+      <label class="form-label">상태</label>
+      <select class="form-select" id="hosp-status">
+        <option value="unknown">❓ 미조사</option>
+        <option value="online">🌐 온라인 가능</option>
+        <option value="call">📞 전화 필요</option>
+        <option value="waiting">🟡 신청대기</option>
+        <option value="done">✅ 확정</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">전화번호 (선택)</label>
+      <input type="text" class="form-input" id="hosp-phone" placeholder="예: 1588-0000">
+    </div>
+    <div class="form-group">
+      <label class="form-label">예약 페이지 URL (선택)</label>
+      <input type="url" class="form-input" id="hosp-url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">신청자 (선택)</label>
+      <input type="text" class="form-input" id="hosp-applicant">
+    </div>
+    <div class="form-group">
+      <label class="form-label">메모 (선택)</label>
+      <input type="text" class="form-input" id="hosp-memo">
+    </div>
+    <div class="modal-buttons">
+      <button class="btn btn-secondary" onclick="closeModal('hospital-modal')">취소</button>
+      <button class="btn btn-primary" onclick="saveHospital()">추가</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "hospital-tracker-v4";
+const OLD_STORAGE_KEY = "hospital-tracker-v3";
+
+const DEFAULT_DATA = [
+  { id: "h1", name: "분당서울대병원", status: "done", phone: "1588-3369",
+    url: "https://www.snubh.org", applicant: "", memo: "",
+    doctors: [{ id: "d1", name: "노재홍", weekday: "",
+      visits: [{ id: "v1", type: "scheduled", date: "2026-05-11", time: "14:10", notes: "" }] }] },
+  { id: "h2", name: "삼성서울병원", status: "done", phone: "1599-3114",
+    url: "https://www.samsunghospital.com", applicant: "", memo: "",
+    doctors: [{ id: "d2", name: "이동윤", weekday: "",
+      visits: [{ id: "v2", type: "scheduled", date: "2026-05-12", time: "09:20", notes: "" }] }] },
+  { id: "h3", name: "세브란스병원", status: "waiting", phone: "1599-1004",
+    url: "https://sev.severance.healthcare", applicant: "채연", memo: "빠른예약 신청 완료",
+    doctors: [] },
+  { id: "h4", name: "서울아산병원", status: "waiting", phone: "1688-7575",
+    url: "https://www.amc.seoul.kr", applicant: "수연", memo: "빠른예약 신청 완료",
+    doctors: [
+      { id: "d3", name: "김주현", weekday: "월 진료", visits: [] },
+      { id: "d4", name: "김성훈", weekday: "화·수 오후", visits: [] }
+    ] },
+  { id: "h5", name: "고대 안산병원", status: "waiting", phone: "1577-7516",
+    url: "https://ansan.kumc.or.kr", applicant: "수연(친구)", memo: "빠른예약 신청 완료",
+    doctors: [{ id: "d5", name: "민경진", weekday: "", visits: [] }] },
+  { id: "h6", name: "고대 구로병원", status: "online", phone: "1588-3369",
+    url: "https://guro.kumc.or.kr", applicant: "", memo: "온라인 즉시 예약 가능",
+    doctors: [
+      { id: "d6", name: "소경아", weekday: "",
+        visits: [{ id: "v6", type: "scheduled", date: "2026-05-14", time: "", notes: "" }] },
+      { id: "d7", name: "홍진화", weekday: "",
+        visits: [{ id: "v7", type: "scheduled", date: "2026-05-19", time: "", notes: "" }] }
+    ] },
+  { id: "h7", name: "고대 안암병원", status: "online", phone: "1577-0083",
+    url: "https://anam.kumc.or.kr", applicant: "", memo: "온라인 즉시 예약 가능",
+    doctors: [
+      { id: "d8", name: "김성민", weekday: "",
+        visits: [{ id: "v8", type: "scheduled", date: "2026-05-22", time: "", notes: "" }] },
+      { id: "d9", name: "이선미", weekday: "",
+        visits: [{ id: "v9", type: "scheduled", date: "2026-06-04", time: "", notes: "" }] },
+      { id: "d10", name: "서현경", weekday: "",
+        visits: [{ id: "v10", type: "scheduled", date: "2026-06-05", time: "", notes: "" }] },
+      { id: "d11", name: "류기진", weekday: "",
+        visits: [{ id: "v11", type: "scheduled", date: "2026-06-10", time: "", notes: "" }] },
+      { id: "d12", name: "송재윤", weekday: "",
+        visits: [{ id: "v12", type: "scheduled", date: "2026-06-24", time: "", notes: "" }] }
+    ] },
+  { id: "h8", name: "서울대학교병원", status: "call", phone: "1588-5700",
+    url: "https://www.snuh.org", applicant: "", memo: "온라인 예약 불가 - 전화 필요",
+    doctors: [] },
+  { id: "h9", name: "서울성모병원", status: "call", phone: "1588-1511",
+    url: "https://www.cmcseoul.or.kr", applicant: "", memo: "온라인 예약 불가 - 전화 필요",
+    doctors: [
+      { id: "d13", name: "김미란", weekday: "", visits: [] },
+      { id: "d14", name: "이근호", weekday: "", visits: [] }
+    ] },
+  { id: "h10", name: "가천대 길병원", status: "unknown", phone: "",
+    url: "https://www.gilhospital.com", applicant: "", memo: "예약 방법 미조사",
+    doctors: [] },
+  { id: "h11", name: "아주대학교병원", status: "unknown", phone: "",
+    url: "https://www.ajoumc.or.kr", applicant: "", memo: "예약 방법 미조사",
+    doctors: [] }
+];
+
+const statusLabels = {
+  done: "✅ 확정", waiting: "🟡 신청대기",
+  online: "🌐 온라인 가능", call: "📞 전화 필요", unknown: "❓ 미조사"
+};
+const groupOrder = ["done", "waiting", "online", "call", "unknown"];
+const KOREAN_DAYS = ["일","월","화","수","목","금","토"];
+const KOREAN_DAYS_FULL = ["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
+
+let hospitals = loadData();
+let currentFilter = "all";
+let editingHospitalId = null;
+let editingDoctorId = null;
+let editingVisitId = null;
+let currentVisitType = "scheduled";
+
+function loadData() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    // Migrate from v3
+    const oldSaved = localStorage.getItem(OLD_STORAGE_KEY);
+    if (oldSaved) {
+      const oldData = JSON.parse(oldSaved);
+      if (Array.isArray(oldData)) return migrateFromV3(oldData);
+    }
+  } catch (e) { console.error(e); }
+  return JSON.parse(JSON.stringify(DEFAULT_DATA));
+}
+
+function migrateFromV3(oldData) {
+  return oldData.map(h => ({
+    ...h,
+    doctors: (h.doctors || []).map(d => ({
+      id: d.id || genId("d"),
+      name: d.name,
+      weekday: d.weekday || "",
+      visits: d.date
+        ? [{ id: genId("v"), type: "scheduled", date: d.date, time: d.time || "", notes: "" }]
+        : []
+    }))
+  }));
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+  localStorage.setItem(STORAGE_KEY + "-updated", new Date().toISOString());
+  updateLastUpdated();
+  if (syncUrl) pushToBackend();
+}
+
+// ─── Sync ────────────────────────────────────────────
+const SYNC_URL_KEY = "tracker-sync-url";
+let syncUrl = localStorage.getItem(SYNC_URL_KEY) || "";
+
+function setSyncStatus(text, type) {
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  if (!text) { el.className = "sync-status off"; return; }
+  el.textContent = text;
+  el.className = "sync-status " + (type || "");
+}
+
+async function fetchFromBackend(silent) {
+  if (!syncUrl) return null;
+  if (!silent) setSyncStatus("⟳ 받는 중", "syncing");
+  try {
+    const res = await fetch(syncUrl + "?_=" + Date.now());
+    const json = await res.json();
+    if (json.ok) {
+      setSyncStatus("✓ 동기화됨", "success");
+      return json;
+    }
+    setSyncStatus("⚠ " + (json.error || "오류"), "error");
+    return null;
+  } catch (e) {
+    setSyncStatus("⚠ 연결 실패", "error");
+    return null;
+  }
+}
+
+async function pushToBackend() {
+  if (!syncUrl) return;
+  setSyncStatus("⟳ 저장 중", "syncing");
+  try {
+    const res = await fetch(syncUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ data: hospitals })
+    });
+    const json = await res.json();
+    if (json.ok) {
+      setSyncStatus("✓ 저장됨", "success");
+    } else {
+      setSyncStatus("⚠ " + (json.error || "저장 실패"), "error");
+    }
+  } catch (e) {
+    setSyncStatus("⚠ 연결 실패", "error");
+  }
+}
+
+function openSettingsModal() {
+  document.getElementById("sync-url-input").value = syncUrl;
+  const info = document.getElementById("sync-info");
+  if (syncUrl) {
+    info.style.display = "";
+    document.getElementById("sync-info-text").textContent =
+      "현재 동기화 ON · " + syncUrl.slice(0, 50) + "...";
+  } else {
+    info.style.display = "none";
+  }
+  showModal("settings-modal");
+}
+
+async function saveSyncSettings() {
+  const newUrl = document.getElementById("sync-url-input").value.trim();
+  if (!newUrl) { alert("URL을 입력해주세요. 동기화 끄기 버튼을 누르려면 '동기화 끄기' 클릭."); return; }
+  if (!/^https:\/\/script\.google\.com\/macros\/s\//.test(newUrl)) {
+    if (!confirm("Apps Script URL 형식이 아닌 것 같아요. 그래도 저장할까요?")) return;
+  }
+  syncUrl = newUrl;
+  localStorage.setItem(SYNC_URL_KEY, syncUrl);
+  closeModal("settings-modal");
+
+  const result = await fetchFromBackend();
+  if (!result) return;
+
+  if (Array.isArray(result.data) && result.data.length > 0) {
+    const useRemote = confirm(
+      "시트에 이미 데이터가 있어요.\n\n[확인] 시트 데이터로 덮어쓰기 (가족이 먼저 설정한 경우)\n[취소] 내 데이터를 시트로 보내기 (내가 처음 설정하는 경우)"
+    );
+    if (useRemote) {
+      hospitals = result.data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+      renderStats(); renderCards();
+    } else {
+      await pushToBackend();
+    }
+  } else {
+    await pushToBackend();
+  }
+}
+
+function disableSync() {
+  if (!confirm("동기화를 끌까요? 데이터는 이 기기에만 저장됩니다.")) return;
+  syncUrl = "";
+  localStorage.removeItem(SYNC_URL_KEY);
+  setSyncStatus("");
+  closeModal("settings-modal");
+}
+
+// 페이지 활성화 시 자동 새로고침
+let lastFetchAt = 0;
+async function maybeRefresh() {
+  if (!syncUrl) return;
+  if (Date.now() - lastFetchAt < 30000) return;
+  lastFetchAt = Date.now();
+  const result = await fetchFromBackend(true);
+  if (result && Array.isArray(result.data) && result.data.length > 0) {
+    const localStr = JSON.stringify(hospitals);
+    const remoteStr = JSON.stringify(result.data);
+    if (localStr !== remoteStr) {
+      hospitals = result.data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+      renderStats(); renderCards();
+    }
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) maybeRefresh();
+});
+
+function updateLastUpdated() {
+  const ts = localStorage.getItem(STORAGE_KEY + "-updated");
+  if (!ts) return;
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  let label;
+  if (diff < 60) label = "방금 전";
+  else if (diff < 3600) label = `${Math.floor(diff/60)}분 전`;
+  else if (diff < 86400) label = `${Math.floor(diff/3600)}시간 전`;
+  else label = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  document.getElementById("last-updated").textContent = `최근 업데이트: ${label}`;
+}
+
+function genId(prefix) {
+  return prefix + "-" + Date.now() + "-" + Math.floor(Math.random()*10000);
+}
+
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getDDay(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d - today) / 86400000);
+  if (diff === 0) return { text: "D-DAY", days: 0 };
+  if (diff > 0) return { text: "D-" + diff, days: diff };
+  return { text: "D+" + (-diff), days: diff };
+}
+
+function isUrgent(dday) {
+  return dday && dday.days >= 0 && dday.days <= 7;
+}
+
+function isPast(dday) {
+  return dday && dday.days < 0;
+}
+
+function formatDateFull(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return "";
+  return `${d.getMonth()+1}월 ${d.getDate()}일 ${KOREAN_DAYS_FULL[d.getDay()]}`;
+}
+
+function formatDateShort(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return "";
+  return `${d.getMonth()+1}/${d.getDate()} (${KOREAN_DAYS[d.getDay()]})`;
+}
+
+function formatTime12(time24) {
+  if (!time24) return "";
+  const [h, m] = time24.split(":").map(Number);
+  if (h === 0) return `오전 12:${String(m).padStart(2,'0')}`;
+  if (h < 12) return `오전 ${h}:${String(m).padStart(2,'0')}`;
+  if (h === 12) return `오후 12:${String(m).padStart(2,'0')}`;
+  return `오후 ${h-12}:${String(m).padStart(2,'0')}`;
+}
+
+function formatRelative(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return "";
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((d - today) / 86400000);
+  if (diff === 0) return "오늘";
+  if (diff === 1) return "내일";
+  if (diff === 2) return "모레";
+  if (diff === -1) return "어제";
+  if (diff === -2) return "그저께";
+  if (diff > 0 && diff <= 30) return `${diff}일 후`;
+  if (diff < 0) return `${-diff}일 전`;
+  return "";
+}
+
+function getNextVisit(doctor) {
+  const today = todayStr();
+  const future = doctor.visits
+    .filter(v => v.type === "scheduled" && v.date && v.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (future.length > 0) return future[0];
+  // Fallback: any scheduled without date or in past
+  const undated = doctor.visits.filter(v => v.type === "scheduled" && !v.date);
+  if (undated.length > 0) return undated[0];
+  return null;
+}
+
+function getPastVisits(doctor) {
+  const today = todayStr();
+  const next = getNextVisit(doctor);
+  return doctor.visits
+    .filter(v => v !== next)
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
+function earliestDate(hospital) {
+  const dates = [];
+  hospital.doctors.forEach(d => {
+    const v = getNextVisit(d);
+    if (v && v.date) dates.push(v.date);
+  });
+  return dates.sort()[0] || null;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderStats() {
+  const counts = { done: 0, waiting: 0, online: 0, call: 0, unknown: 0 };
+  hospitals.forEach(h => counts[h.status]++);
+  const totalDocs = hospitals.reduce((s, h) => s + h.doctors.length, 0);
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><div class="stat-num">${counts.done}</div><div class="stat-label">확정</div></div>
+    <div class="stat"><div class="stat-num">${counts.waiting}</div><div class="stat-label">대기</div></div>
+    <div class="stat"><div class="stat-num">${counts.online}</div><div class="stat-label">온라인</div></div>
+    <div class="stat"><div class="stat-num">${counts.call}</div><div class="stat-label">전화</div></div>
+    <div class="stat"><div class="stat-num">${counts.unknown}</div><div class="stat-label">미조사</div></div>
+  `;
+  let firstDate = null;
+  hospitals.forEach(h => {
+    if (h.status === "done") {
+      const d = earliestDate(h);
+      if (d && (!firstDate || d < firstDate)) firstDate = d;
+    }
+  });
+  const firstSchedule = firstDate ? `${formatDateShort(firstDate)} (${formatRelative(firstDate)})` : "—";
+  document.getElementById("subtitle").textContent =
+    `병원 ${hospitals.length}곳 · 교수 ${totalDocs}명 · 가장 빠른 확정: ${firstSchedule}`;
+}
+
+function renderCards() {
+  const main = document.getElementById("main");
+  const filtered = currentFilter === "all"
+    ? hospitals
+    : hospitals.filter(h => h.status === currentFilter);
+
+  if (filtered.length === 0) {
+    main.innerHTML = `<div class="empty">해당하는 항목이 없어요</div>`;
+    return;
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    const da = earliestDate(a), db = earliestDate(b);
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return da.localeCompare(db);
+  });
+
+  let html = "";
+  if (currentFilter === "all") {
+    groupOrder.forEach(status => {
+      const items = sorted.filter(h => h.status === status);
+      if (items.length === 0) return;
+      html += `<div class="group-title">${statusLabels[status]} · ${items.length}곳</div>`;
+      items.forEach(h => html += renderCard(h));
+    });
+  } else {
+    sorted.forEach(h => html += renderCard(h));
+  }
+  main.innerHTML = html;
+}
+
+function renderCard(h) {
+  const earliest = earliestDate(h);
+  const dday = getDDay(earliest);
+  const ddayHTML = dday
+    ? `<span class="visit-dday ${isUrgent(dday) ? '' : 'far'}">${dday.text}</span>`
+    : "";
+
+  const doctorsHTML = h.doctors.map(d => renderDoctor(h.id, d)).join("");
+  const addDocHTML = `<button class="add-doc-btn" onclick="openDoctorModal('${h.id}')">+ 교수 추가</button>`;
+
+  const metaParts = [];
+  if (h.applicant) metaParts.push(`신청자: ${escapeHtml(h.applicant)}`);
+  const metaHTML = metaParts.length ? `<div class="hospital-meta">${metaParts.join(" · ")}</div>` : "";
+
+  const memoClass = h.memo ? "" : "empty";
+  const memoText = h.memo || "메모 추가하려면 탭";
+  const memoHTML = `<div class="memo ${memoClass}" data-hid="${h.id}" onclick="editMemo(this)">${escapeHtml(memoText)}</div>`;
+
+  const buttons = [];
+  if (h.url) {
+    const isPrimary = h.status === "online" || h.status === "unknown";
+    buttons.push(`<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener" class="btn ${isPrimary ? 'btn-primary' : 'btn-secondary'}">🌐 예약 페이지</a>`);
+  }
+  if (h.phone) {
+    buttons.push(`<a href="tel:${h.phone.replace(/-/g,'')}" class="btn ${h.status === 'call' ? 'btn-warning' : 'btn-secondary'}">📞 ${escapeHtml(h.phone)}</a>`);
+  }
+  const actionsHTML = buttons.length
+    ? `<div class="actions ${buttons.length === 1 ? 'single' : ''}">${buttons.join('')}</div>`
+    : "";
+
+  return `
+    <div class="card ${h.status}">
+      <div class="card-top">
+        <button class="badge ${h.status}" onclick="openStatusModal('${h.id}')">${statusLabels[h.status]}</button>
+        ${ddayHTML}
+      </div>
+      <div class="hospital">${escapeHtml(h.name)}</div>
+      ${metaHTML}
+      ${doctorsHTML}
+      ${addDocHTML}
+      ${memoHTML}
+      ${actionsHTML}
+    </div>
+  `;
+}
+
+function renderDoctor(hid, d) {
+  const next = getNextVisit(d);
+  const past = getPastVisits(d);
+
+  const wdHTML = d.weekday ? `<span class="doc-weekday">${escapeHtml(d.weekday)}</span>` : "";
+  const editDocHTML = `
+    <div class="doc-actions">
+      <button class="icon-btn" onclick="openDoctorModal('${hid}','${d.id}')" title="교수 정보 수정">✏️</button>
+    </div>
+  `;
+
+  let nextHTML = "";
+  if (next) {
+    const dday = getDDay(next.date);
+    const urgent = isUrgent(dday);
+    const pills = [];
+    if (next.date) {
+      pills.push(`<span class="pill pill-date${urgent ? ' urgent' : ''}">📅 ${escapeHtml(formatDateFull(next.date))}</span>`);
+    } else {
+      pills.push(`<span class="pill pill-date" style="opacity:0.6;">📅 날짜 미정</span>`);
+    }
+    if (next.time) {
+      pills.push(`<span class="pill pill-time">🕐 ${escapeHtml(formatTime12(next.time))}</span>`);
+    }
+    if (next.date) {
+      const rel = formatRelative(next.date);
+      if (rel) pills.push(`<span class="pill pill-relative">${escapeHtml(rel)}</span>`);
+    }
+    const pillsHTML = `<div class="visit-pills">${pills.join("")}</div>`;
+    const ddayBadge = dday
+      ? `<span class="visit-dday ${urgent ? '' : 'far'}">${dday.text}</span>`
+      : "";
+    nextHTML = `
+      <div class="visit-next ${urgent ? 'urgent' : ''}" onclick="openVisitModal('${hid}','${d.id}','${next.id}')">
+        <div class="visit-next-top">
+          <span class="visit-label ${urgent ? 'urgent' : ''}">📅 다음 진료</span>
+          ${ddayBadge}
+        </div>
+        ${pillsHTML}
+      </div>
+    `;
+  }
+
+  let pastHTML = "";
+  if (past.length > 0) {
+    const items = past.map(v => {
+      const typeLabel = v.type === "completed" ? "진료완료" : "예정";
+      const typeClass = v.type === "completed" ? "completed" : "scheduled";
+      const datePill = v.date
+        ? `<span class="pill pill-small pill-date">📅 ${escapeHtml(formatDateShort(v.date))}</span>`
+        : `<span class="pill pill-small pill-relative">날짜 미정</span>`;
+      const timePill = v.time
+        ? `<span class="pill pill-small pill-time">🕐 ${escapeHtml(formatTime12(v.time))}</span>`
+        : "";
+      const notesHTML = v.notes
+        ? `<div class="past-visit-notes">${escapeHtml(v.notes)}</div>`
+        : `<div class="past-visit-notes empty">메모 없음</div>`;
+      return `
+        <div class="past-visit" onclick="openVisitModal('${hid}','${d.id}','${v.id}')">
+          <div class="past-visit-top">
+            <div class="visit-pills" style="margin-top:0;">${datePill}${timePill}</div>
+            <span class="past-visit-type ${typeClass}">${typeLabel}</span>
+          </div>
+          ${notesHTML}
+        </div>
+      `;
+    }).join("");
+    pastHTML = `
+      <details class="past-visits">
+        <summary>지난 진료 (${past.length})</summary>
+        ${items}
+      </details>
+    `;
+  }
+
+  const addVisitHTML = `<button class="add-visit-btn" onclick="openVisitModal('${hid}','${d.id}')">+ ${next ? '추가 예약' : '예약 추가'}</button>`;
+
+  return `
+    <div class="doctor-section">
+      <div class="doc-header">
+        <span class="doc-name">${escapeHtml(d.name)}${d.name ? ' 교수' : ''}</span>
+        ${wdHTML}
+        ${editDocHTML}
+      </div>
+      ${nextHTML}
+      ${pastHTML}
+      ${addVisitHTML}
+    </div>
+  `;
+}
+
+// ---- Memo edit ----
+function editMemo(el) {
+  if (el.contentEditable === "true") return;
+  const hid = el.dataset.hid;
+  const h = hospitals.find(x => x.id === hid);
+  if (el.classList.contains("empty")) { el.textContent = ""; el.classList.remove("empty"); }
+  el.contentEditable = "true";
+  el.focus();
+  document.execCommand && document.execCommand('selectAll', false, null);
+  const finish = () => {
+    el.contentEditable = "false";
+    h.memo = el.innerText.trim();
+    saveData();
+    renderCards();
+    el.removeEventListener("blur", finish);
+    el.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => { if (e.key === "Escape") el.blur(); };
+  el.addEventListener("blur", finish);
+  el.addEventListener("keydown", onKey);
+}
+
+// ---- Status modal ----
+function openStatusModal(hid) {
+  editingHospitalId = hid;
+  const h = hospitals.find(x => x.id === hid);
+  document.getElementById("status-options").innerHTML = groupOrder.map(s => `
+    <button class="status-option ${h.status === s ? 'selected' : ''}" onclick="setStatus('${s}')">
+      ${statusLabels[s]}
+    </button>
+  `).join("");
+  showModal("status-modal");
+}
+function setStatus(newStatus) {
+  hospitals.find(x => x.id === editingHospitalId).status = newStatus;
+  saveData(); renderStats(); renderCards();
+  closeModal("status-modal");
+}
+
+// ---- Doctor modal ----
+function openDoctorModal(hid, did) {
+  editingHospitalId = hid;
+  editingDoctorId = did || null;
+  const deleteBtn = document.getElementById("doc-delete-btn");
+  if (did) {
+    const h = hospitals.find(x => x.id === hid);
+    const d = h.doctors.find(x => x.id === did);
+    document.getElementById("doctor-modal-title").textContent = "교수 정보 수정";
+    document.getElementById("doc-name").value = d.name || "";
+    document.getElementById("doc-weekday").value = d.weekday || "";
+    deleteBtn.style.display = "";
+  } else {
+    document.getElementById("doctor-modal-title").textContent = "교수 추가";
+    document.getElementById("doc-name").value = "";
+    document.getElementById("doc-weekday").value = "";
+    deleteBtn.style.display = "none";
+  }
+  showModal("doctor-modal");
+  setTimeout(() => document.getElementById("doc-name").focus(), 100);
+}
+function saveDoctor() {
+  const name = document.getElementById("doc-name").value.trim();
+  if (!name) { alert("교수 이름을 입력해주세요"); return; }
+  const weekday = document.getElementById("doc-weekday").value.trim();
+  const h = hospitals.find(x => x.id === editingHospitalId);
+  if (editingDoctorId) {
+    const d = h.doctors.find(x => x.id === editingDoctorId);
+    d.name = name; d.weekday = weekday;
+  } else {
+    h.doctors.push({ id: genId("d"), name, weekday, visits: [] });
+  }
+  saveData(); renderStats(); renderCards();
+  closeModal("doctor-modal");
+}
+function deleteCurrentDoctor() {
+  if (!confirm("이 교수와 모든 진료 기록을 삭제할까요?")) return;
+  const h = hospitals.find(x => x.id === editingHospitalId);
+  h.doctors = h.doctors.filter(d => d.id !== editingDoctorId);
+  saveData(); renderStats(); renderCards();
+  closeModal("doctor-modal");
+}
+
+// ---- Visit modal ----
+function setVisitType(type) {
+  currentVisitType = type;
+  document.getElementById("type-scheduled").classList.toggle("selected", type === "scheduled");
+  document.getElementById("type-completed").classList.toggle("selected", type === "completed");
+  document.getElementById("notes-label").textContent =
+    type === "completed" ? "진료 내용 *" : "메모 (선택)";
+}
+
+function setupQuickDates() {
+  const quickDates = document.getElementById("quick-dates");
+  const today = new Date();
+  const items = [
+    { label: "오늘", offset: 0 },
+    { label: "내일", offset: 1 },
+    { label: "모레", offset: 2 },
+    { label: "1주 후", offset: 7 },
+    { label: "2주 후", offset: 14 }
+  ];
+  quickDates.innerHTML = items.map(item => {
+    const d = new Date(today); d.setDate(d.getDate() + item.offset);
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return `<button class="quick-date-btn" onclick="document.getElementById('visit-date').value='${ds}'">${item.label}</button>`;
+  }).join("");
+}
+
+function openVisitModal(hid, did, vid) {
+  editingHospitalId = hid;
+  editingDoctorId = did;
+  editingVisitId = vid || null;
+  setupQuickDates();
+  const deleteBtn = document.getElementById("visit-delete-btn");
+
+  if (vid) {
+    const h = hospitals.find(x => x.id === hid);
+    const d = h.doctors.find(x => x.id === did);
+    const v = d.visits.find(x => x.id === vid);
+    document.getElementById("visit-modal-title").textContent = `${d.name} 교수 - 진료 수정`;
+    setVisitType(v.type);
+    document.getElementById("visit-date").value = v.date || "";
+    document.getElementById("visit-time").value = v.time || "";
+    document.getElementById("visit-notes").value = v.notes || "";
+    deleteBtn.style.display = "";
+  } else {
+    const h = hospitals.find(x => x.id === hid);
+    const d = h.doctors.find(x => x.id === did);
+    document.getElementById("visit-modal-title").textContent = `${d.name} 교수 - 새 진료`;
+    setVisitType("scheduled");
+    document.getElementById("visit-date").value = "";
+    document.getElementById("visit-time").value = "";
+    document.getElementById("visit-notes").value = "";
+    deleteBtn.style.display = "none";
+  }
+  showModal("visit-modal");
+}
+
+function saveVisit() {
+  const date = document.getElementById("visit-date").value;
+  const time = document.getElementById("visit-time").value;
+  const notes = document.getElementById("visit-notes").value.trim();
+  if (!date) { alert("날짜를 입력해주세요"); return; }
+  if (currentVisitType === "completed" && !notes) {
+    if (!confirm("진료 내용 없이 저장할까요?")) return;
+  }
+  const h = hospitals.find(x => x.id === editingHospitalId);
+  const d = h.doctors.find(x => x.id === editingDoctorId);
+  if (editingVisitId) {
+    const v = d.visits.find(x => x.id === editingVisitId);
+    v.type = currentVisitType; v.date = date; v.time = time; v.notes = notes;
+  } else {
+    d.visits.push({
+      id: genId("v"), type: currentVisitType, date, time, notes
+    });
+  }
+  saveData(); renderStats(); renderCards();
+  closeModal("visit-modal");
+}
+
+function deleteCurrentVisit() {
+  if (!confirm("이 진료 기록을 삭제할까요?")) return;
+  const h = hospitals.find(x => x.id === editingHospitalId);
+  const d = h.doctors.find(x => x.id === editingDoctorId);
+  d.visits = d.visits.filter(v => v.id !== editingVisitId);
+  saveData(); renderStats(); renderCards();
+  closeModal("visit-modal");
+}
+
+// ---- Hospital modal ----
+function openHospitalModal() {
+  document.getElementById("hosp-name").value = "";
+  document.getElementById("hosp-status").value = "unknown";
+  document.getElementById("hosp-phone").value = "";
+  document.getElementById("hosp-url").value = "";
+  document.getElementById("hosp-applicant").value = "";
+  document.getElementById("hosp-memo").value = "";
+  showModal("hospital-modal");
+  setTimeout(() => document.getElementById("hosp-name").focus(), 100);
+}
+function saveHospital() {
+  const name = document.getElementById("hosp-name").value.trim();
+  if (!name) { alert("병원명을 입력해주세요"); return; }
+  hospitals.push({
+    id: genId("h"), name,
+    status: document.getElementById("hosp-status").value,
+    phone: document.getElementById("hosp-phone").value.trim(),
+    url: document.getElementById("hosp-url").value.trim(),
+    applicant: document.getElementById("hosp-applicant").value.trim(),
+    memo: document.getElementById("hosp-memo").value.trim(),
+    doctors: []
+  });
+  saveData(); renderStats(); renderCards();
+  closeModal("hospital-modal");
+}
+
+// ---- Modal helpers ----
+function showModal(id) { document.getElementById(id).classList.add("show"); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+document.querySelectorAll(".modal-overlay").forEach(o => {
+  o.addEventListener("click", (e) => { if (e.target === o) o.classList.remove("show"); });
+});
+
+// ---- Filter chips ----
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    currentFilter = chip.dataset.filter;
+    renderCards();
+  });
+});
+
+document.getElementById("add-hospital-btn").addEventListener("click", openHospitalModal);
+
+// Init
+async function init() {
+  if (syncUrl) {
+    const result = await fetchFromBackend();
+    if (result && Array.isArray(result.data) && result.data.length > 0) {
+      hospitals = result.data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
+    }
+  }
+  renderStats();
+  renderCards();
+  updateLastUpdated();
+  setInterval(updateLastUpdated, 60000);
+}
+init();
+</script>
+
+</body>
+</html>
