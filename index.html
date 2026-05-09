@@ -1422,12 +1422,6 @@ function downloadICS(hid, did, vid) {
   const v = d.visits.find(x => x.id === vid);
   if (!v.date) { alert("날짜가 없으면 캘린더에 추가할 수 없어요."); return; }
 
-  // Android: Google Calendar URL로 처리 (.ics를 다운로드만 하고 끝나는 문제 회피)
-  if (/Android/i.test(navigator.userAgent)) {
-    openGoogleCalendar(h, d, v);
-    return;
-  }
-
   const dateRaw = v.date.replace(/-/g, '');
   let startLine, endLine;
   if (v.time) {
@@ -1476,7 +1470,17 @@ function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  // iOS: blob URL + download 속성 → Safari가 .ics MIME 인식해서 Calendar 앱 직접 호출
+  // Android: Apps Script ICS 엔드포인트로 navigation → text/calendar MIME으로 응답 → 캘린더 앱 선택지 등장
+  if (/Android/i.test(navigator.userAgent)) {
+    if (syncUrl) {
+      window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
+    } else {
+      openGoogleCalendar(h, d, v);
+    }
+    return;
+  }
+
+  // iOS / desktop: blob URL + download 속성 → Safari가 .ics MIME 인식해서 Calendar 앱 직접 호출
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
