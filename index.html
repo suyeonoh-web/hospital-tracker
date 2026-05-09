@@ -157,6 +157,11 @@
   .pill-time { background: #fff5e6; color: #cc6600; }
   .pill-relative { background: #ececef; color: #424245; font-weight: 500; }
   .pill-small { font-size: 11px; padding: 3px 10px; gap: 3px; }
+  .pill-cal {
+    background: #1d1d1f; color: #fff; border: none;
+    cursor: pointer; font-family: inherit;
+  }
+  .pill-cal:active { background: #424245; }
 
   .past-visits {
     margin-top: 4px;
@@ -351,8 +356,8 @@
 
 <header>
   <div class="header-top">
-    <h1>병원 예약 트래커</h1>
-    <button class="settings-btn" onclick="openSettingsModal()" title="동기화 설정">⚙️</button>
+    <h1 id="header-title" style="cursor:pointer;" title="길게 누르면 동기화 설정">병원 예약 트래커</h1>
+    <button class="settings-btn" id="settings-btn" onclick="openSettingsModal()" title="동기화 설정">⚙️</button>
   </div>
   <p class="subtitle"><span id="subtitle"></span><span class="sync-status off" id="sync-status"></span></p>
   <div class="stats" id="stats"></div>
@@ -686,6 +691,7 @@ async function saveSyncSettings() {
   }
   syncUrl = newUrl;
   localStorage.setItem(SYNC_URL_KEY, syncUrl);
+  updateSettingsBtnVisibility();
   closeModal("settings-modal");
 
   const result = await fetchFromBackend();
@@ -712,6 +718,7 @@ function disableSync() {
   syncUrl = "";
   localStorage.removeItem(SYNC_URL_KEY);
   setSyncStatus("");
+  updateSettingsBtnVisibility();
   closeModal("settings-modal");
 }
 
@@ -983,6 +990,9 @@ function renderDoctor(hid, d) {
     if (next.date) {
       const rel = formatRelative(next.date);
       if (rel) pills.push(`<span class="pill pill-relative">${escapeHtml(rel)}</span>`);
+    }
+    if (next.date) {
+      pills.push(`<button class="pill pill-cal" onclick="event.stopPropagation();downloadICS('${hid}','${d.id}','${next.id}')">📲 캘린더 추가</button>`);
     }
     const pillsHTML = `<div class="visit-pills">${pills.join("")}</div>`;
     const ddayBadge = dday
@@ -1262,6 +1272,103 @@ document.querySelectorAll(".chip").forEach(chip => {
 
 document.getElementById("add-hospital-btn").addEventListener("click", openHospitalModal);
 
+// ─── Calendar (.ics) ──────────────────────────────────
+function pad2(n) { return String(n).padStart(2, '0'); }
+function icsEscape(s) {
+  return String(s ?? '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+}
+function addOneHour(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  return pad2((h + 1) % 24) + ':' + pad2(m);
+}
+function downloadICS(hid, did, vid) {
+  const h = hospitals.find(x => x.id === hid);
+  const d = h.doctors.find(x => x.id === did);
+  const v = d.visits.find(x => x.id === vid);
+  if (!v.date) { alert("날짜가 없으면 캘린더에 추가할 수 없어요."); return; }
+
+  const dateRaw = v.date.replace(/-/g, '');
+  let startLine, endLine;
+  if (v.time) {
+    const startT = v.time.replace(':', '') + '00';
+    const endT = addOneHour(v.time).replace(':', '') + '00';
+    startLine = `DTSTART:${dateRaw}T${startT}`;
+    endLine = `DTEND:${dateRaw}T${endT}`;
+  } else {
+    const next = new Date(parseDate(v.date));
+    next.setDate(next.getDate() + 1);
+    const endDateRaw = `${next.getFullYear()}${pad2(next.getMonth()+1)}${pad2(next.getDate())}`;
+    startLine = `DTSTART;VALUE=DATE:${dateRaw}`;
+    endLine = `DTEND;VALUE=DATE:${endDateRaw}`;
+  }
+
+  const now = new Date();
+  const stamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth()+1)}${pad2(now.getUTCDate())}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}Z`;
+
+  const summary = `🏥 ${h.name} - ${d.name} 교수`;
+  const descParts = [v.notes];
+  if (h.phone) descParts.push(`전화: ${h.phone}`);
+  if (h.url) descParts.push(`예약 페이지: ${h.url}`);
+  const description = descParts.filter(Boolean).join('\n');
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Hospital Tracker//KO',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${vid}@hospital-tracker`,
+    `DTSTAMP:${stamp}`,
+    startLine,
+    endLine,
+    `SUMMARY:${icsEscape(summary)}`,
+    `DESCRIPTION:${icsEscape(description)}`,
+    `LOCATION:${icsEscape(h.name)}`,
+    'BEGIN:VALARM',
+    'TRIGGER:-PT2H',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Reminder',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${h.name}_${v.date}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ─── Settings button visibility + long-press to reveal ─
+function updateSettingsBtnVisibility() {
+  const btn = document.getElementById("settings-btn");
+  if (btn) btn.style.display = syncUrl ? "none" : "";
+}
+(function setupLongPress() {
+  const title = document.getElementById("header-title");
+  if (!title) return;
+  let timer;
+  const start = () => {
+    timer = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(15);
+      openSettingsModal();
+    }, 700);
+  };
+  const cancel = () => clearTimeout(timer);
+  title.addEventListener("touchstart", start, { passive: true });
+  title.addEventListener("touchend", cancel);
+  title.addEventListener("touchmove", cancel);
+  title.addEventListener("mousedown", start);
+  title.addEventListener("mouseup", cancel);
+  title.addEventListener("mouseleave", cancel);
+  title.addEventListener("contextmenu", (e) => { e.preventDefault(); openSettingsModal(); });
+})();
+
 // Init
 async function init() {
   if (syncUrl) {
@@ -1271,6 +1378,7 @@ async function init() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(hospitals));
     }
   }
+  updateSettingsBtnVisibility();
   renderStats();
   renderCards();
   updateLastUpdated();
