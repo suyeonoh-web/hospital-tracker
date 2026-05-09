@@ -439,6 +439,18 @@
   </div>
 </div>
 
+<!-- Calendar confirm modal -->
+<div class="modal-overlay" id="cal-confirm-modal">
+  <div class="modal">
+    <div class="modal-title">📅 캘린더에 추가하시겠습니까?</div>
+    <div id="cal-confirm-text" style="text-align:center;font-size:14px;color:#424245;padding:8px 0 16px;line-height:1.7;white-space:pre-line;"></div>
+    <div class="modal-buttons">
+      <button class="btn btn-secondary" onclick="closeModal('cal-confirm-modal')">아니오</button>
+      <button class="btn btn-primary" id="cal-confirm-yes">예</button>
+    </div>
+  </div>
+</div>
+
 <!-- Settings modal -->
 <div class="modal-overlay" id="settings-modal">
   <div class="modal">
@@ -805,7 +817,7 @@ function updateLastUpdated() {
 }
 
 function genId(prefix) {
-  return prefix + "-" + Date.now() + "-" + Math.floor(Math.random()*10000);
+  return prefix + "-" + Date.now() + "-" + Math.floor(Math.random()*1e9);
 }
 
 function parseDate(dateStr) {
@@ -1321,6 +1333,19 @@ function saveHospital() {
 // ---- Modal helpers ----
 function showModal(id) { document.getElementById(id).classList.add("show"); }
 function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+
+function showCalConfirmModal(detailText, onYes) {
+  document.getElementById('cal-confirm-text').textContent = detailText;
+  showModal('cal-confirm-modal');
+  // 예 버튼에 새 핸들러 연결 (이전 핸들러 클리어를 위해 노드 교체)
+  const yesBtn = document.getElementById('cal-confirm-yes');
+  const newYes = yesBtn.cloneNode(true);
+  yesBtn.parentNode.replaceChild(newYes, yesBtn);
+  newYes.onclick = () => {
+    closeModal('cal-confirm-modal');
+    onYes();
+  };
+}
 document.querySelectorAll(".modal-overlay").forEach(o => {
   o.addEventListener("click", (e) => { if (e.target === o) o.classList.remove("show"); });
 });
@@ -1470,29 +1495,41 @@ async function downloadICS(hid, did, vid) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  // Android: 확인 팝업 → Web Share API (시스템 공유 시트 → 기본 캘린더 앱 선택)
+  // Android: 1) 자동 blob 다운로드 → 2) 2초 후 커스텀 팝업 → 3) 예 → 캘린더 앱 호출
   if (/Android/i.test(navigator.userAgent)) {
-    const dateLabel = formatDateFull(v.date) + (v.time ? ' ' + formatTime12(v.time) : '');
-    if (!confirm(`📅 캘린더에 추가하시겠습니까?\n\n${h.name} ${d.name} 교수\n${dateLabel}`)) return;
+    // 1) 자동 다운로드 (blob URL은 same-origin이라 Chrome 다운로드 prompt 회피 가능)
+    const blob = new Blob([ics], { type: 'text/calendar' });
+    const fileName = `${h.name}_${v.date}.ics`;
+    const blobUrl = URL.createObjectURL(blob);
+    const dlAnchor = document.createElement('a');
+    dlAnchor.href = blobUrl;
+    dlAnchor.download = fileName;
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    document.body.removeChild(dlAnchor);
 
-    // Web Share API (Samsung Calendar 등 시스템 캘린더 앱이 share target으로 등록됨)
-    try {
-      const blob = new Blob([ics], { type: 'text/calendar' });
-      const file = new File([blob], `${h.name}_${v.date}.ics`, { type: 'text/calendar' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: `🏥 ${h.name} - ${d.name} 교수` });
-        return;
-      }
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;
-    }
+    // 2) 2초 후 확인 팝업
+    const detailText = `${h.name} · ${d.name} 교수\n${formatDateFull(v.date)}${v.time ? '\n' + formatTime12(v.time) : ''}`;
+    setTimeout(() => {
+      showCalConfirmModal(detailText, async () => {
+        // 3) 예 클릭 시 Web Share API → 기본 캘린더 앱 선택
+        try {
+          const file = new File([blob], fileName, { type: 'text/calendar' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: `🏥 ${h.name} - ${d.name} 교수` });
+            return;
+          }
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;
+        }
+        // 폴백: Apps Script ICS endpoint
+        if (syncUrl) {
+          window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
+        }
+      });
+    }, 2000);
 
-    // 폴백 (Web Share 미지원 환경): Apps Script ICS endpoint → 다운로드 → 캘린더 앱 열기
-    if (syncUrl) {
-      window.location.href = syncUrl + '?action=ics&data=' + encodeURIComponent(ics);
-    } else {
-      alert('동기화 URL이 없어 캘린더 추가가 어렵습니다. ⚙️에서 URL을 설정해주세요.');
-    }
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     return;
   }
 
